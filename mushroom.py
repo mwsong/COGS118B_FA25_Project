@@ -38,7 +38,7 @@ text_encoder = CLIPTextModelWithProjection.from_pretrained(
 
 pipe.tokenizer, pipe.text_encoder = tokenizer, text_encoder
 
-#embedding functions 
+#embedding functions
 def embed_images(paths, batch_size=8):
     out, fe, enc = [], pipe.feature_extractor, pipe.image_encoder
     for i in range(0, len(paths), batch_size):
@@ -73,13 +73,19 @@ def classify(pipe, image, label):
     best = sim.argmax().item()
     return label[best]
 
+#-------------------------------------------------------------------------------------------------------- -----------------
+#PCA FUNCTIONS 
 
-#pca functions 
+#run_pca takes embeds(should be a numpy array, make sure to put in what's run from embed_whole_folder or embed_label_prompts or combine)
+#n is the number of principal components, needs to be 2 to be 2d for plotting scatter plot 
+#returns reduced: which is what should be inputted into plot_pca and kmeans
+#returns pca: which is the actual pca model-> only to put into plotting eigenvalues to see how many principal components actually matter
 def run_pca(embeds, n=2):
     pca = PCA(n_components=n)
     reduced = pca.fit_transform(embeds)
     return reduced, pca
 
+#to see how many principal components matter
 def plot_eigenvalues(pca):
     eigenvalues = pca.explained_variance_
     plt.figure(figsize=(8,4))
@@ -98,7 +104,12 @@ def plot_pca_2d(red_embeds, labels=None, title="PCA Scatter Plot"):
         plt.legend()
     plt.show()
 
-#combine embeds 
+#COMBINE EMBEDS
+
+#combines and repeats the text as equally as possible bc if img embed and text embed different number of rows it can't properly 
+#attach one text to one image row. so eg. if there's 8 images and 2 text rows, then it'll do the first text row for the first 
+#4 images, then the second one for the next 4 so make sure we order things correctly. eg. 'beechwood' should attach to the
+#beechwood images 
 def combine_embeds(img_embeds, text_embeds, repeat_text=True):
     N_images = img_embeds.shape[0]
     N_texts  = text_embeds.shape[0]
@@ -115,7 +126,8 @@ def combine_embeds(img_embeds, text_embeds, repeat_text=True):
 
     return np.concatenate([img_embeds, text_embeds], axis=1)
 
-#k-means 
+#KMEANS
+
 def cluster(all_embeds, n=2, rs=42):
     kmeans = KMeans(n_clusters=n, random_state=rs)
     kmeans.fit(all_embeds)
@@ -124,16 +136,32 @@ def cluster(all_embeds, n=2, rs=42):
 def cluster_accuracy(true_labels, cluster_labels):
     return adjusted_rand_score(true_labels, cluster_labels)
 
-#folder->img embed 
+#EMBEDDING MULTIPLE (IMAGES/TEXT)
+
+#embeds a whole folder of images (need to specify root as 'mushroom')
 def embed_whole_folder(folder_path, bs=8):
     img_files = [os.path.join(folder_path,f) for f in os.listdir(folder_path) if f.endswith(".png")]
     embeds = embed_images(img_files, batch_size=bs)
     return embeds.cpu().numpy()
 
+#embeds a whole array of labels 
 def embed_label_prompts(labels, bs=64):
     embeds = embed_texts(labels, batch_size=bs)
     return embeds.cpu().numpy()
 
+#embeds only a portion of the images from a folder eg. first 8 of each. n is the number of images you want
+def embed_first_n_images(folder_path, n=1, bs=8):
+    img_files = [
+        os.path.join(folder_path, f)
+        for f in os.listdir(folder_path)
+        if f.lower().endswith(".png")
+    ]
+
+    img_files.sort()
+    img_files = img_files[:n]
+
+    embeds = embed_images(img_files, batch_size=bs)
+    return embeds.cpu().numpy()
 
 #classify images (multiple)
 def classify_images(pipe, image_paths, labels):
