@@ -133,6 +133,7 @@ def cluster(all_embeds, n=2, rs=42):
     kmeans.fit(all_embeds)
     return kmeans.labels_, kmeans
 
+#this gives ARI score (0 meeans random clustering, 1 is awesome, and negative is SAD/ WORSE than random)
 def cluster_accuracy(true_labels, cluster_labels):
     return adjusted_rand_score(true_labels, cluster_labels)
 
@@ -149,7 +150,8 @@ def embed_label_prompts(labels, bs=64):
     embeds = embed_texts(labels, batch_size=bs)
     return embeds.cpu().numpy()
 
-#embeds only a portion of the images from a folder eg. first 8 of each. n is the number of images you want
+#embeds only a portion of the images from a folder eg. first 8 of each. n is the number of images you want. 
+#careful when using bc some only have 8 images max
 def embed_first_n_images(folder_path, n=1, bs=8):
     img_files = [
         os.path.join(folder_path, f)
