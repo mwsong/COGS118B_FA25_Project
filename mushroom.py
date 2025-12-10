@@ -11,7 +11,7 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score
  
 from diffusers import StableUnCLIPImg2ImgPipeline
-from transformers import CLIPTextModelWithProjection, CLIPTokenizer
+from transformers import CLIPTextModelWithProjection, CLIPTokenizer, BlipProcessor, BlipForConditionalGeneration
 
 #required pip installs (once in terminal)
 #pip install --upgrade diffusers[torch]
@@ -37,6 +37,51 @@ text_encoder = CLIPTextModelWithProjection.from_pretrained(
 ).to(device)
 
 pipe.tokenizer, pipe.text_encoder = tokenizer, text_encoder
+
+
+#loading BLIP processor and model
+model_name = "Salesforce/blip-image-captioning-base"
+
+processor = BlipProcessor.from_pretrained(model_name)
+blip_model = BlipForConditionalGeneration.from_pretrained(model_name).to(device)
+
+
+# ----------------------------- FUNCTIONS ---------------------------------------------------
+
+
+#BLIP captioning functions
+def caption_image(image_path, model=blip_model, processor=processor, max_new_tokens=30, num_beams=5):
+    image = Image.open(image_path).convert("RGB")
+
+    inputs = processor(images=image, return_tensors="pt").to(device)
+
+    with torch.no_grad():
+        output_ids = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            num_beams = num_beams
+        )
+
+    caption = processor.tokenizer.decode(output_ids[0], skip_special_tokens=True)
+    return caption 
+
+
+def caption_images(image_paths, model=blip_model, processor=processor, 
+                   max_new_tokens=30, num_beams=5):
+    images = [Image.open(p).convert("RGB") for p in image_paths]
+
+    inputs = processor(images=images, return_tensors="pt", padding=True).to(device)
+
+    with torch.no_grad():
+        output_ids = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            num_beams=num_beams
+        )
+
+    captions = processor.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+    return captions
+
 
 #embedding functions
 def embed_images(paths, batch_size=8):
