@@ -1,9 +1,7 @@
 import os
-import requests
 import torch
 from PIL import Image
 import matplotlib.pyplot as plt
-from io import BytesIO
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
@@ -171,6 +169,15 @@ def combine_embeds(img_embeds, text_embeds, repeat_text=True):
 
     return np.concatenate([img_embeds, text_embeds], axis=1)
 
+def combine_embeds2(labels, text_list):
+    """
+    After clustering, assign text to clusters for interpretation only.
+    """
+    cluster_map = {}
+    for label, text in zip(labels, text_list):
+        cluster_map.setdefault(label, []).append(text)
+    return cluster_map
+
 #KMEANS
 
 def cluster(all_embeds, n=2, rs=42):
@@ -213,3 +220,122 @@ def embed_first_n_images(folder_path, n=1, bs=8):
 #classify images (multiple)
 def classify_images(pipe, image_paths, labels):
     return [classify(pipe, img, labels) for img in image_paths]
+
+
+#------- more functions 
+
+from sklearn.preprocessing import normalize 
+from sklearn.manifold import TSNE
+import umap 
+
+def normalize_embeds(embeds):
+    return normalize(embeds)
+
+#tsne  is another method for visualizing cluster separation, 
+#umap is modern tsne 
+#t-SNE
+#MAY need to tweak perplex and learning rates depending on images 
+#tsne_2d = reduce_tsne(pca_embeds)  # use PCA first for speed
+#plot_clusters(tsne_2d, labels)
+def reduce_tsne(embeds, perplexity=30, learning_rate=200, n_components=2):
+    tsne = TSNE(
+        n_components=n_components,
+        perplexity=perplexity,
+        learning_rate=learning_rate,
+        init='pca'
+    )
+    return tsne.fit_transform(embeds)
+
+#umap 
+#umap_2d = reduce_umap(pca_embeds)
+#plot_clusters(umap_2d, labels)
+def reduce_umap(embeds, n_neighbors=15, min_dist=0.1, n_components=2):
+    reducer = umap.UMAP(
+        n_neighbors=n_neighbors,
+        min_dist=min_dist,
+        n_components=n_components
+    )
+    return reducer.fit_transform(embeds)
+
+from sklearn.cluster import AgglomerativeClustering, DBSCAN
+#aggomerative another form of clustering 
+#dbscan good for weird organic clusters, detects outliters 
+
+#cluster_agglomerative 
+#through density. high density = cluster, low dens = outlier
+#labels, model = cluster_agglomerative(pca_embeds, k=2)
+def cluster_agglomerative(embeds, k, linkage="ward"):
+    model = AgglomerativeClustering(n_clusters=k, linkage=linkage)
+    labels = model.fit_predict(embeds)
+    return labels, model
+
+#may need to tweak eps depending on embedding distances
+def cluster_dbscan(embeds, eps=0.5, min_samples=5):
+    model = DBSCAN(eps=eps, min_samples=min_samples)
+    labels = model.fit_predict(embeds)
+    return labels, model
+
+#gmm gaussian mix 
+#g_labels, g_probs, gmm = cluster_gmm(all_embeds, k=2)
+
+from sklearn.mixture import GaussianMixture
+
+def cluster_gmm(embeds, k=2, rs=42):
+    gmm = GaussianMixture(n_components=k, covariance_type='full', random_state=rs)
+    gmm.fit(embeds)
+    labels = gmm.predict(embeds)
+    probs = gmm.predict_proba(embeds)
+    return labels, probs, gmm
+
+#spectral cluster
+#s_labels, _ = cluster_spectral(all_embeds, k=2) 
+from sklearn.cluster import SpectralClustering
+
+def cluster_spectral(embeds, k=2, rs=42):
+    spec = SpectralClustering(
+        n_clusters=k,
+        affinity='nearest_neighbors',
+        random_state=rs
+    )
+    labels = spec.fit_predict(embeds)
+    return labels, spec
+
+#silhouette-score 
+#cluster_quality(all_embeds, k_labels)
+from sklearn.metrics import silhouette_score
+
+def cluster_quality(embeds, labels):
+    return silhouette_score(embeds, labels)
+
+#plot all clusters 
+def plot_clusters(xy, labels, title="Clusters"):
+    """
+    xy: 2D reduced embeddings (UMAP/TSNE)
+    labels: cluster assignments
+    """
+    plt.figure(figsize=(8, 6))
+    scatter = plt.scatter(xy[:, 0], xy[:, 1], c=labels, cmap="tab20")
+    plt.title(title)
+    plt.colorbar(scatter)
+    plt.show()
+
+#centroid similarity analysis 
+def cluster_centroids(embeds, labels):
+    centroids = []
+    unique = sorted(np.unique(labels))
+    for c in unique:
+        centroids.append(embeds[labels == c].mean(axis=0))
+    return np.vstack(centroids)
+
+import re
+#sanitizing text descriptions for CLIP 
+def clean_text_description(text):
+    forbidden = ["fly agaric", "fly", "agaric", 
+                 "funeral bell", "galerina", "marginata"]
+    t = text.lower()
+    for word in forbidden:
+        t = re.sub(r"\b" + word + r"\b", "", t)
+    return ' '.join(t.split())
+
+
+
