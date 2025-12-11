@@ -1,5 +1,6 @@
 import os
 import torch
+import seaborn as sns
 from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,6 +8,7 @@ import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score
+from sklearn.metrics.pairwise import cosine_similarity 
  
 from diffusers import StableUnCLIPImg2ImgPipeline
 from transformers import CLIPTextModelWithProjection, CLIPTokenizer, BlipProcessor, BlipForConditionalGeneration
@@ -340,4 +342,43 @@ def clean_text_description(text):
     return ' '.join(t.split())
 
 
+#--- plotting pairwise similarity 
+#sims is the cosine similarity of the embeds 
+#have the labels for row and col b the names of .. eg. the first 6 mushrooms 
+def plot_similarity_heatmap(sims, row_labels=None, col_labels=None, 
+                            cmap="viridis", figsize=(8, 6), title="Similarity Heatmap"):
+    """
+    Plots a similarity matrix as a heatmap with text annotations.
+    
+    sims: 2D numpy array of similarities (e.g., cosine similarity)
+    row_labels: list of strings for y-axis
+    col_labels: list of strings for x-axis
+    cmap: colormap for heatmap
+    figsize: size of the figure
+    title: plot title
+    """
+    plt.figure(figsize=figsize)
+    ax = plt.gca()
+
+    # Display heatmap
+    im = ax.imshow(sims, cmap=cmap)
+
+    # Add text annotations
+    for i in range(sims.shape[0]):
+        for j in range(sims.shape[1]):
+            ax.text(j, i, f"{sims[i, j]:.2f}", ha='center', va='center', color='black', fontsize=8)
+
+    # Set axis ticks
+    if row_labels is not None:
+        ax.set_yticks(np.arange(len(row_labels)))
+        ax.set_yticklabels(row_labels)
+    if col_labels is not None:
+        ax.set_xticks(np.arange(len(col_labels)))
+        ax.set_xticklabels(col_labels, rotation=45, ha="right")
+
+    # Add colorbar and title
+    plt.colorbar(im, ax=ax)
+    ax.set_title(title)
+    plt.tight_layout()
+    plt.show()
 
