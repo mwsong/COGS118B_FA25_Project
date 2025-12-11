@@ -12,6 +12,8 @@ from sklearn.metrics.pairwise import cosine_similarity
  
 from diffusers import StableUnCLIPImg2ImgPipeline
 from transformers import CLIPTextModelWithProjection, CLIPTokenizer, BlipProcessor, BlipForConditionalGeneration
+from transformers import CLIPProcessor, CLIPModel
+
 
 #required pip installs (once in terminal)
 #pip install --upgrade diffusers[torch]
@@ -48,6 +50,27 @@ blip_model = BlipForConditionalGeneration.from_pretrained(model_name).to(device)
 
 
 # ----------------------------- FUNCTIONS ---------------------------------------------------
+def embed_images(paths, batch_size=8):
+    out, fe, enc = [], pipe.feature_extractor, pipe.image_encoder
+    for i in range(0, len(paths), batch_size):
+        imgs = [Image.open(p).convert("RGB") for p in paths[i:i + batch_size]]
+        px = fe(imgs, return_tensors="pt").pixel_values.to(enc.device, enc.dtype)
+        with torch.no_grad():
+            v = enc(px)[0]
+        out.append(v)
+    return torch.cat(out)
+
+
+def embed_texts(prompts, batch_size=64):
+    vecs = []
+    for i in range(0, len(prompts), batch_size):
+        toks = tokenizer(prompts[i:i + batch_size],
+                         padding=True, truncation=True, max_length=77,
+                         return_tensors="pt").to(text_encoder.device)
+        with torch.no_grad():
+            t = text_encoder(**toks).text_embeds
+        vecs.append(t)
+    return torch.cat(vecs)
 
 
 #BLIP captioning functions
@@ -83,50 +106,66 @@ def caption_images(image_paths, model=blip_model, processor=processor,
     captions = processor.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
     return captions
 
-#ok another blip that tries to describe instead of generically, with things like cap shape 
-def caption_mushroom_features(image_path, model=blip_model, processor=processor, max_new_tokens=30):
+clip_model_name = "openai/clip-vit-base-patch32"
+clip_model = CLIPModel.from_pretrained(clip_model_name).to(device)
+clip_processor = CLIPProcessor.from_pretrained(clip_model_name)
+
+cap_shapes = ["convex", "flat", "bell-shaped", "conical", "umbrella"]
+cap_colors = ["red", "brown", "white", "yellow", "orange"]
+stem_types = ["thin", "thick", "short", "long"]
+patterns = ["spotted", "striped", "scaly", "smooth"]
+
+def classify_feature(image_path, feature_list):
+    """
+    Classifies a single image against a list of textual labels (zero-shot).
+    Returns the best label and the probability distribution.
+    """
     image = Image.open(image_path).convert("RGB")
-    
-    # Instruction prompt
-    prompt = ("Describe the details of the mushroom in terms of its cap shape, cap color, "
-              "stem type, and any patterns. Be short and concise.")
+    inputs = clip_processor(text=feature_list, images=image, return_tensors="pt", padding=True).to(device)
 
-    inputs = processor(images=image, text=prompt, return_tensors="pt").to(device)
-    
     with torch.no_grad():
-        output_ids = model.generate(**inputs, max_new_tokens=max_new_tokens)
+        outputs = clip_model(**inputs)
+        logits_per_image = outputs.logits_per_image  # shape: (1, num_labels)
+        probs = logits_per_image.softmax(dim=1)
     
-    caption = processor.tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    return caption
+    best_idx = probs.argmax().item()
+    best_label = feature_list[best_idx]
+    return best_label, probs[0].cpu().numpy()
 
-def caption_mushroom_features_batch(image_paths, max_new_tokens=30):
-    captions = []
-    for img in image_paths:
-        caption = caption_mushroom_features(img, max_new_tokens=max_new_tokens)
-        captions.append(caption)
-    return captions
 
-#embedding functions
-def embed_images(paths, batch_size=8):
-    out, fe, enc = [], pipe.feature_extractor, pipe.image_encoder
-    for i in range(0, len(paths), batch_size):
-        imgs = [Image.open(p).convert("RGB") for p in paths[i:i + batch_size]]
-        px = fe(imgs, return_tensors="pt").pixel_values.to(enc.device, enc.dtype)
-        with torch.no_grad():
-            v = enc(px)[0]
-        out.append(v)
-    return torch.cat(out)
+def classify_mushroom_features(image_path):
+    """
+    Returns a dictionary of structured features for a single mushroom image.
+    """
+    features = {}
+    features["cap_shape"], _ = classify_feature(image_path, cap_shapes)
+    features["cap_color"], _ = classify_feature(image_path, cap_colors)
+    features["stem_type"], _ = classify_feature(image_path, stem_types)
+    features["pattern"], _ = classify_feature(image_path, patterns)
+    return features
 
-def embed_texts(prompts, batch_size=64):
-    vecs = []
-    for i in range(0, len(prompts), batch_size):
-        toks = tokenizer(prompts[i:i + batch_size],
-                         padding=True, truncation=True, max_length=77,
-                         return_tensors="pt").to(text_encoder.device)
-        with torch.no_grad():
-            t = text_encoder(**toks).text_embeds
-        vecs.append(t)
-    return torch.cat(vecs)
+
+def classify_mushroom_features_batch(image_paths):
+    """
+    Returns a list of dictionaries, one per image.
+    """
+    results = []
+    for path in image_paths:
+        feats = classify_mushroom_features(path)
+        results.append(feats)
+    return results
+
+#embed_fn is whatever function we put in for embed, or none
+def features_to_clip_embeddings(features_list, embed_fn=None):
+    text_prompts = []
+    for f in features_list:
+        desc = f"{f['cap_shape']} cap, {f['cap_color']} color, {f['stem_type']} stem, pattern {f['pattern']}."
+        text_prompts.append(desc)
+    
+    if embed_fn is not None:
+        return embed_fn(text_prompts)
+    return text_prompts
+
 
 #classify 
 def classify(pipe, image, label):
