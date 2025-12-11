@@ -83,6 +83,28 @@ def caption_images(image_paths, model=blip_model, processor=processor,
     captions = processor.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
     return captions
 
+#ok another blip that tries to describe instead of generically, with things like cap shape 
+def caption_mushroom_features(image_path, model=blip_model, processor=processor, max_new_tokens=30):
+    image = Image.open(image_path).convert("RGB")
+    
+    # Instruction prompt
+    prompt = ("Describe the details of the mushroom in terms of its cap shape, cap color, "
+              "stem type, and any patterns. Be short and concise.")
+
+    inputs = processor(images=image, text=prompt, return_tensors="pt").to(device)
+    
+    with torch.no_grad():
+        output_ids = model.generate(**inputs, max_new_tokens=max_new_tokens)
+    
+    caption = processor.tokenizer.decode(output_ids[0], skip_special_tokens=True)
+    return caption
+
+def caption_mushroom_features_batch(image_paths, max_new_tokens=30):
+    captions = []
+    for img in image_paths:
+        caption = caption_mushroom_features(img, max_new_tokens=max_new_tokens)
+        captions.append(caption)
+    return captions
 
 #embedding functions
 def embed_images(paths, batch_size=8):
