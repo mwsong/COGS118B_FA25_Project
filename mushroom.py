@@ -15,6 +15,7 @@ from transformers import CLIPTextModelWithProjection, CLIPTokenizer, BlipProcess
 #pip install --upgrade diffusers[torch]
 #pip install transformers
 #pip install scikit-learn
+#AND pip install umap-learn
 
 
 #loading pipeline and encoders 
@@ -235,9 +236,10 @@ def normalize_embeds(embeds):
 #umap is modern tsne 
 #t-SNE
 #MAY need to tweak perplex and learning rates depending on images 
+#perplexity < n smaples/3
 #tsne_2d = reduce_tsne(pca_embeds)  # use PCA first for speed
 #plot_clusters(tsne_2d, labels)
-def reduce_tsne(embeds, perplexity=30, learning_rate=200, n_components=2):
+def reduce_tsne(embeds, perplexity=15, learning_rate=200, n_components=2):
     tsne = TSNE(
         n_components=n_components,
         perplexity=perplexity,
@@ -249,7 +251,7 @@ def reduce_tsne(embeds, perplexity=30, learning_rate=200, n_components=2):
 #umap 
 #umap_2d = reduce_umap(pca_embeds)
 #plot_clusters(umap_2d, labels)
-def reduce_umap(embeds, n_neighbors=15, min_dist=0.1, n_components=2):
+def reduce_umap(embeds, n_neighbors=10, min_dist=0.1, n_components=2):
     reducer = umap.UMAP(
         n_neighbors=n_neighbors,
         min_dist=min_dist,
