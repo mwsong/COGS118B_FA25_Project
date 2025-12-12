@@ -110,10 +110,13 @@ clip_model_name = "openai/clip-vit-base-patch32"
 clip_model = CLIPModel.from_pretrained(clip_model_name).to(device)
 clip_processor = CLIPProcessor.from_pretrained(clip_model_name)
 
-cap_shapes = ["convex", "flat", "bell-shaped", "conical", "umbrella"]
-cap_colors = ["red", "brown", "white", "yellow", "orange"]
-stem_types = ["thin", "thick", "short", "long"]
-patterns = ["spotted", "striped", "scaly", "smooth"]
+cap_shapes = ["convex", "flat", "bell-shaped", "conical", "umbrella", "depressed", "infundibuliform", "umbonate", "ovate", "cylindrical"]
+cap_colors = ["red", "brown", "white", "yellow", "orange", "gray", "black", "pink", "purple", "green", "blue", "tan", "cream"]
+stem_types = ["thin", "thick", "short", "long", "bulbous", "clavate", "equal", "tapering", "rooting", "hollow"]
+patterns = ["spotted", "striped", "scaly", "smooth", "reticulate", "glandular", "fibrillose", "viscid", "cracked", "wrinkled"]
+cap_surface = ["fibrous", "grooves", "scaly", "smooth"]
+gill_spacing = ["close", "crowded", "distant"]
+gill_size = ["broad", "narrow"]
 
 def classify_feature(image_path, feature_list):
     """
@@ -140,8 +143,11 @@ def classify_mushroom_features(image_path):
     features = {}
     features["cap_shape"], _ = classify_feature(image_path, cap_shapes)
     features["cap_color"], _ = classify_feature(image_path, cap_colors)
+    features["cap_surface"], _ = classify_feature(image_path, cap_surface)
     features["stem_type"], _ = classify_feature(image_path, stem_types)
     features["pattern"], _ = classify_feature(image_path, patterns)
+    features["gill_spacing"], _ = classify_feature(image_path, gill_spacing)
+    features["gill_size"], _ = classify_feature(image_path, gill_size)
     return features
 
 
